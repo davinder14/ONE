@@ -1,22 +1,66 @@
 pipeline {
- agent any
-  stages {
-    stage('build'){
-      steps{
-         sh 'git --version'
-         sh 'docker --version,
-         }
-       }
+    agent any
+
+        parameters {
+        string(name: 'Update_Job_Config', defaultValue: 'Yes',description: "Do you want to do a dry run to update job to latest version and grab parameters?" )
+        string(name: 'JOB_ID', description: 'JoB ID of Gitlab CI')
+        string(name: 'PROJECT_ID', description: 'Porject ID of Gitlab CI')
+        string(name: 'DB_SIZE', description: 'MariaDB Storage Size')
+        string(name: 'BP_NAME', description: 'Blue print name')
+
+    }
+    stages {
+            stage("Updating Job Config") {
+            steps {
+                script {
+                    if ("${params.Update_Job_Config}" == "Yes") {
+                        currentBuild.result = 'ABORTED'
+                        error('DRY RUN COMPLETED. JOB UPDATED TO LATEST VERSION AND PARAMETERIZED.')
+                    }
+                }
+            }
+                }
+      stage('Download_Git_Artifact') {
+      steps {
+      script {
+      echo 'Job: Download Git artifact'
+      sh "curl -x https_proxy=http://http-proxy-gin:3128 --output artifacts.zip --header 'PRIVATE-TOKEN: 6zdznw9tfbqQ6dRe-e7N' https://gitlab.innov.intraorange/api/v4/projects/${PROJECT_ID}/jobs/${JOB_ID}/artifacts"
+              }
+            }
+        }
+      stage('Download_Mariadb_Role') {
+      steps {
+      script {
+      echo 'Job: Download Mariadb Role'
+      echo 'Calling ansible playbook for downloading Mariadb Role'
+      sh "ANSIBLE_HOST_KEY_CHECKING=false /usr/bin/ansible-playbook install_required_roles.yml"
+              }
+            }
+        }
+      stage('Installing_MariaDB') {
+      steps {
+      parallel (
+      "RUEIL": {
+      echo 'Job: Installing MariaDB'
+      echo 'Calling ansible playbook for installing MariaDB'
+      sh "/usr/bin/chmod 400 roles/deployment/ansibleKeypair"
+      sh "/usr/bin/ansible-playbook mariadb.yml -e \"SITE=rueil BP_NAME=${params.BP_NAME} DB_SIZE=${params.DB_SIZE}\""
+              },
+      "NORMANDIE": {
+      echo 'Job: Installing MariaDB'
+      echo 'Calling ansible playbook for installing MariaDB'
+      sh "/usr/bin/chmod 400 roles/deployment/ansibleKeypair"
+      sh "/usr/bin/ansible-playbook mariadb.yml -e \"SITE=normandie BP_NAME=${params.BP_NAME} DB_SIZE=${params.DB_SIZE}\""
+              }
+      )
+            }
+        }
+    }
+               post {
+        always {
+            cleanWs()
+        }
     }
 
-post {
-      always {
-        echo ' this will always run'
-       }
-       sucess {
-             echo ' this will run if build successful'
-       }
-       failure {
-           echo ' this will run if failed'
-       }
 }
+
