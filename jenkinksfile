@@ -1,0 +1,22 @@
+pipeline {
+ agent any
+  stages {
+    stage('build'){
+      steps{
+         sh 'git --version'
+         sh 'docker --version,
+         }
+       }
+    }
+
+post {
+      always {
+        echo ' this will always run'
+       }
+       sucess {
+             echo ' this will run if build successful'
+       }
+       failure {
+           echo ' this will run if failed'
+       }
+}
